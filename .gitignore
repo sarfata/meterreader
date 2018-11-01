@@ -1,0 +1,6 @@
+.env
+img
+.DS_Store
+.Python
+canny.png
+extracted.png
