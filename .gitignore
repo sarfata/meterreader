@@ -2,5 +2,7 @@
 img
 .DS_Store
 .Python
+digits/
+.vscode/.ropeproject
 canny.png
 extracted.png

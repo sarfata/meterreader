@@ -4,161 +4,73 @@ import math
 import numpy as np
 import imutils
 
-# https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
-def order_points(pts):
-  # initialzie a list of coordinates that will be ordered
-  # such that the first entry in the list is the top-left,
-  # the second entry is the top-right, the third is the
-  # bottom-right, and the fourth is the bottom-left
-  rect = np.zeros((4, 2), dtype = "float32")
+PARAMS = {
+  'thrs1': 143,
+  'thrs2': 50,
+  'blur': 3,
+  'epsilon': 10
+}
 
-  # the top-left point will have the smallest sum, whereas
-  # the bottom-right point will have the largest sum
-  s = pts.sum(axis = 1)
-  rect[0] = pts[np.argmin(s)]
-  rect[2] = pts[np.argmax(s)]
+def experiment_extraction(images):
+  imageIndex = 0
+  image = cv2.imread(images[imageIndex])
 
-  # now, compute the difference between the points, the
-  # top-right point will have the smallest difference,
-  # whereas the bottom-left will have the largest difference
-  diff = np.diff(pts, axis = 1)
-  rect[1] = pts[np.argmin(diff)]
-  rect[3] = pts[np.argmax(diff)]
-
-  # return the ordered coordinates
-  return rect
-
-def four_point_transform(image, pts):
-  # obtain a consistent order of the points and unpack them
-  # individually
-  rect = order_points(pts)
-  (tl, tr, br, bl) = rect
-
-  # compute the width of the new image, which will be the
-  # maximum distance between bottom-right and bottom-left
-  # x-coordiates or the top-right and top-left x-coordinates
-  widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-  widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-  maxWidth = max(int(widthA), int(widthB))
-
-  # compute the height of the new image, which will be the
-  # maximum distance between the top-right and bottom-right
-  # y-coordinates or the top-left and bottom-left y-coordinates
-  heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-  heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-  maxHeight = max(int(heightA), int(heightB))
-
-  # now that we have the dimensions of the new image, construct
-  # the set of destination points to obtain a "birds eye view",
-  # (i.e. top-down view) of the image, again specifying points
-  # in the top-left, top-right, bottom-right, and bottom-left
-  # order
-  dst = np.array([
-    [0, 0],
-    [maxWidth - 1, 0],
-    [maxWidth - 1, maxHeight - 1],
-    [0, maxHeight - 1]], dtype = "float32")
-
-  # compute the perspective transform matrix and then apply it
-  M = cv2.getPerspectiveTransform(rect, dst)
-  warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
-
-  # return the warped image
-  return warped
-
-def analyze(imageFilename):
-  image = cv2.imread(imageFilename)
-  grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-  cannyImage = cv2.Canny(grayImage, 200, 250)
-
-  cv2.imshow('GazMeter', cannyImage)
-  cv2.waitKey(0)
-
-'''
-Return the angle in radians needed to rotate this image and make it straight.
-'''
-def makeImageHorizontal(image):
-  image = imutils.resize(image, height=1000)
-  grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-  blurredImage = cv2.GaussianBlur(grayImage, (5, 5), 0)
-  cannyImage = cv2.Canny(blurredImage, 1, 200)
-  # cv2.imshow('blurred image', cannyImage)
-  # cv2.waitKey(0)
-  lines = cv2.HoughLines(cannyImage,1,np.pi/180,100)
-
-  print(lines)
-  averageAngles = []
-  for l in lines:
-    [rho, theta] = l[0]
-    a = np.cos(theta)
-    b = np.sin(theta)
-    x0 = a*rho
-    y0 = b*rho
-    x1 = int(x0 + 1000*(-b))
-    y1 = int(y0 + 1000*(a))
-    x2 = int(x0 - 1000*(-b))
-    y2 = int(y0 - 1000*(a))
-    cv2.line(image,(x1,y1),(x2,y2),(0,0,255),2)
-
-    thetaDeg = theta / np.pi * 180.
-    print("Line x0={} Angle={}".format(rho, thetaDeg))
-    if thetaDeg > 60 and thetaDeg < 120:
-      averageAngles.append(thetaDeg)
-
-  averageAngle = sum(averageAngles) / len(averageAngles)
-
-  rotated = imutils.rotate(image, averageAngle - 90)
-
-  return rotated
-
-def experiment_extraction(image):
   def slider_moved(x):
     update_image()
 
   def update_image(save = False):
-    paramList = ["thrs1", "thrs2", "blur"]
     params = {}
-    for p in paramList:
-      params[p] = cv2.getTrackbarPos(p, 'canny')
+    for p in PARAMS.keys():
+      params[p] = cv2.getTrackbarPos(p, 'experiment')
 
-    output = extract_canny_image(image, params)
+    if params['blur'] % 2 == 0:
+      # blur size must be odd
+      params['blur'] = params['blur'] + 1
+
     print("Update - Params: {}".format(repr(params)))
+    canny = prepare_canny_image(image, params)
+    output = cv2.cvtColor(canny, cv2.COLOR_GRAY2BGR)
 
-    contours = find_contours(output)
+    contours = find_contours(canny, params)
+    for c in contours:
+      color = (200, 200, 0)
+      if contour_filter(c):
+        color = (0, 20, 200)
 
-    output = cv2.cvtColor(output, cv2.COLOR_GRAY2BGR)
-    if contours is not None:
-      rect = cv2.boundingRect(contours)
-      print("Contour: {} Rect: {}".format(contours, rect))
+      cv2.drawContours(output, [c], 0, (200, 100, 100), 1)
+      rect = cv2.boundingRect(c)
+      cv2.rectangle(output, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), color, 1)
 
-      cv2.rectangle(output, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), (255,0,), 2)
-      cv2.line(output, tuple(contours[0]), tuple(contours[1]), (100,0,255), 2)
-      cv2.line(output, tuple(contours[1]), tuple(contours[2]), (100,0,255), 2)
-      cv2.line(output, tuple(contours[2]), tuple(contours[3]), (100,0,255), 2)
-      cv2.line(output, tuple(contours[3]), tuple(contours[0]), (100,0,255), 2)
+    contour = filter_contours(contours)
 
-      cv2.imshow('canny', imutils.resize(output, height=800))
+    if contour is not None:
+      rect = cv2.boundingRect(contour)
+      print("Contour: {} Rect: {}".format(contour, rect))
+
+      cv2.rectangle(output, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), (255,0,), 1)
+      cv2.putText(output, images[imageIndex], (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, cv2.LINE_AA)
 
       # extracted = four_point_transform(image, contours)
       extracted = image[int(rect[1]):int(rect[1]+rect[3]), int(rect[0]):int(rect[0]+rect[2])]
       #extract_subpart(image, contours)
-
-      (h, w) = extracted.shape[:2]
-      cv2.imshow('extracted', cv2.resize(extracted, (w*4,h*4)))
-
-      if save:
-        print("Saving images to current folder")
-        cv2.imwrite('canny.png', output)
-        cv2.imwrite('extracted.png', extracted)
     else:
-      font = cv2.FONT_HERSHEY_SIMPLEX
-      cv2.putText(output,'NO CONTOUR',(5,5), font, 4,(255,255,255),2,cv2.LINE_AA)
+      cv2.putText(output, "No contour found", (25, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,255), 1, cv2.LINE_AA)
+      extracted = np.zeros((20,135,3), np.uint8)
 
-  cv2.namedWindow('canny')
-  cv2.namedWindow('extracted', cv2.WINDOW_NORMAL)
-  cv2.createTrackbar('thrs1', 'canny', 121, 255, slider_moved)
-  cv2.createTrackbar('thrs2', 'canny', 27, 255, slider_moved)
-  cv2.createTrackbar('blur', 'canny', 9, 255, slider_moved)
+    cv2.imshow('experiment', imutils.resize(output, height=800))
+    (h, w) = extracted.shape[:2]
+    cv2.imshow('extracted', cv2.resize(extracted, (w*4,h*4)))
+
+    if save:
+      print("Saving images to current folder")
+      cv2.imwrite('canny.png', output)
+      cv2.imwrite('extracted.png', extracted)
+
+  cv2.namedWindow('experiment')
+  cv2.namedWindow('extracted')
+
+  for key in PARAMS.keys():
+      cv2.createTrackbar(key, 'experiment', PARAMS[key], 255, slider_moved)
 
   while (True):
     update_image()
@@ -168,50 +80,101 @@ def experiment_extraction(image):
       break
     elif key == ord('s'):
       update_image(True)
+    elif key == ord('p') or key == 2:
+      imageIndex = (imageIndex - 1) % len(images)
+      image = cv2.imread(images[imageIndex])
+      update_image()
+    elif key == ord('n') or key == 3:
+      imageIndex = (imageIndex + 1) % len(images)
+      image = cv2.imread(images[imageIndex])
+      update_image()
+    else:
+      print("Key pressed: {}".format(key))
 
 
   cv2.destroyAllWindows()
   return
 
 
-def extract_canny_image(image, params):
+def prepare_canny_image(image, params):
   grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
   blurredImage = cv2.GaussianBlur(grayImage, (params['blur'], params['blur']), 0)
   cannyImage = cv2.Canny(blurredImage, params['thrs1'], params['thrs2'])
   return cannyImage
 
-def find_contours(cannyImage):
+def find_contours(cannyImage, params):
   # find contours in the edge map, then sort them by their
   # size in descending order
-  cnts = cv2.findContours(cannyImage.copy(), cv2.RETR_EXTERNAL,
+  cnts = cv2.findContours(cannyImage.copy(), cv2.RETR_TREE,
     cv2.CHAIN_APPROX_SIMPLE)
   cnts = cnts[0] if imutils.is_cv2() else cnts[1]
   cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
-  displayCnt = None
 
-  # loop over the contours
+  approxCnts = []
+  for cnt in cnts:
+    epsilon = params['epsilon'] / 100 * cv2.arcLength(cnt,True)
+    approx = cv2.approxPolyDP(cnt,epsilon,True)
+    approxCnts.append(approx)
+
+  return cnts # approxCnts
+
+def contour_filter(c):
+  rect = cv2.boundingRect(c)
+  (w, h) = (rect[2:])
+  if w > h and w/h > 6 and w/h < 7:
+    return True
+  return False
+
+def filter_contours(cnts):
   for c in cnts:
-    # approximate the contour
-    peri = cv2.arcLength(c, True)
-    approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+    if contour_filter(c):
+      return c
 
-    # if the contour has four vertices, then we have found
-    # the thermostat display
-    if len(approx) == 4:
-      displayCnt = approx
-      break
-  return displayCnt.reshape(4, 2)
+  return None
+
+def extract_digits(image):
+  canny = prepare_canny_image(image, PARAMS)
+  contour = filter_contours(find_contours(canny))
+  if contour is not None:
+    rect = cv2.boundingRect(contour)
+    extracted = image[int(rect[1]):int(rect[1]+rect[3]), int(rect[0]):int(rect[0]+rect[2])]
+    return extracted
+  return None
+
+
+# https://medium.com/@gsari/digit-recognition-with-opencv-and-python-cbf962f7e2d0
+# https://github.com/kazmiekr/GasPumpOCR/blob/master/train_model.py
+# https://hackernoon.com/building-a-gas-pump-scanner-with-opencv-python-ios-116fe6c9ae8b
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('image')
+
+  subparsers = parser.add_subparsers(dest='subparser_name')
+
+  exfd = subparsers.add_parser('experiment-finding-digits')
+  exfd.add_argument('images', nargs='+')
+
+  xd = subparsers.add_parser('extract-digits')
+  xd.add_argument('image')
+  xd.add_argument('output', default=None, nargs='?')
+
+
   args = parser.parse_args()
 
-  experiment_extraction(cv2.imread(args.image))
-  #rotated = makeImageHorizontal(cv2.imread(args.image))
-  #counter = (rotated)
-  # cv2.imshow('GazMeter', counter)
-  # cv2.waitKey(0)
+  if args.subparser_name == 'experiment-finding-digits':
+    experiment_extraction(args.images)
+  elif args.subparser_name == 'extract-digits':
+    digits = extract_digits(cv2.imread(args.image))
+    if digits is not None:
+      if args.output:
+        cv2.imwrite(args.output, digits)
+      else:
+        cv2.imshow('digits', digits)
+        cv2.waitKey(0)
+    else:
+      print('No digits found in {}}', args.image)
+  else:
+    print("not ready yet to automatically extract")
 
 if __name__ == '__main__':
   main()
