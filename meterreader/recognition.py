@@ -16,7 +16,8 @@ def hog_of_digit(image):
   nlevels = 64
   useSignedGradients = True
 
-  hog = cv2.HOGDescriptor(winSize,blockSize,blockStride,cellSize,nbins,derivAperture,winSigma,histogramNormType,L2HysThreshold,gammaCorrection,nlevels, useSignedGradients)
+  hog = cv2.HOGDescriptor(winSize,blockSize,blockStride,cellSize,nbins,derivAperture,winSigma,histogramNormType,L2HysThreshold,gammaCorrection,nlevels,useSignedGradients)
+  # hog = cv2.HOGDescriptor()
   descriptor = hog.compute(image)
   return descriptor
 
@@ -44,6 +45,8 @@ input: a list of image
 output: a list of digit, as recognized
 '''
 class DigitsRecognizer(VisibleStage):
+  svm = cv2.ml.SVM_load('svm_data.dat')
+
   def _initWindows(self):
     cv2.namedWindow('DigitsRecognizer')
     cv2.createTrackbar('blur', 'DigitsRecognizer', self._params['blur'], 5, self.guicb)
@@ -64,8 +67,6 @@ class DigitsRecognizer(VisibleStage):
 
   def _process(self):
     output = []
-    print("Recogntion params: {}".format(repr(self.params)))
-
     if self._showYourWork:
       (self.debugDigitHeight, self.debugDigitWidth) = self.input[0].shape[:2]
       # 20px + image + 20px margin + image + 20px margin + ...
@@ -90,9 +91,10 @@ class DigitsRecognizer(VisibleStage):
       blur = grayImage
     _, threshold = cv2.threshold(blur,self.params['thrs1'],self.params['thrs2'],cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     imageHash = hog_of_digit(threshold)
-    if 'shape' in imageHash:
-      print("Hash repr: {} -> {}".format(index, imageHash.shape))
     detected = 0
+    if len(imageHash) > 0:
+      detected = self.svm.predict(np.float32([imageHash]))
+      detected = np.int(detected[1].ravel()[0])
 
     if self._showYourWork:
       self.draw_debug_image(index, 0, image)

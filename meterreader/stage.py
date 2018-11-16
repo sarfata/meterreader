@@ -38,7 +38,6 @@ class Stage(object):
   def _process(self):
     self.outputHandler(self.input)
 
-
 '''
 A stage that creates window to show work and manipulate parametes directly.
 '''

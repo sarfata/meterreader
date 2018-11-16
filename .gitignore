@@ -7,3 +7,4 @@ digits/
 canny.png
 extracted.png
 *.pyc
+svm_data.dat
