@@ -6,3 +6,4 @@ digits/
 .vscode/.ropeproject
 canny.png
 extracted.png
+*.pyc
