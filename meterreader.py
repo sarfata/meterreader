@@ -9,7 +9,7 @@ import sys
 import os.path
 import glob
 import random
-from meterreader import DigitalCounterExtraction, DigitsBreaker, DigitsRecognizer, hog_of_digit
+from meterreader import DigitalCounterExtraction, DigitsBreaker, DigitsCleaner, DigitsRecognizer, DigitRecognition
 
 PARAMS = {
   'extraction': {
@@ -21,32 +21,30 @@ PARAMS = {
   'breaker': {
     'numdigits': 8
   },
-  'recognizer': {
+  'cleaner': {
     'blur': 1,
     'thrs1': 0,
     'thrs2': 255
+  },
+  'recognizer': {
+
   }
 }
 
 def experiment(images):
   extractor = DigitalCounterExtraction(PARAMS['extraction'], True)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
-  reader = DigitsRecognizer(PARAMS['recognizer'], True)
+  cleaner = DigitsCleaner(PARAMS['cleaner'], True)
+  recognizer = DigitsRecognizer(PARAMS['recognizer'])
 
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
-  breaker.outputHandler = lambda image: reader.__setattr__('input', image)
-  reader.outputHandler = lambda digits: print("Reco output: {}".format(repr(digits)))
+  breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
+  cleaner.outputHandler = lambda digits: recognizer.__setattr__('input', digits)
+  recognizer.outputHandler = lambda digits: print("Reco output: {}".format(repr(digits)))
 
   imageIndex = 0
   extractor.input = images[imageIndex]
   while (True):
-    # counter = cv2.cvtColor(counter, cv2.COLOR_BGR2GRAY)
-    # allDigits = breaker.process_image(counter)
-
-    # for i in range(8):
-    #   reader.process_image(allDigits[i], "digit[{}]".format(i))
-
-
     print("waiting for key")
     key = cv2.waitKey(0)
     print("key={}".format(key))
@@ -65,15 +63,17 @@ def experiment(images):
 def extract(image):
   extractor = DigitalCounterExtraction(PARAMS['extraction'], True)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
-  reader = DigitsRecognizer(PARAMS['recognizer'], True)
+  cleaner = DigitsCleaner(PARAMS['cleaner'], True)
+  recognizer = DigitsRecognizer(PARAMS['recognizer'])
 
   output = { 'value': None }
   def outputHandler(v):
     output['value'] = "".join(map(str, v))
 
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
-  breaker.outputHandler = lambda image: reader.__setattr__('input', image)
-  reader.outputHandler = outputHandler
+  breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
+  cleaner.outputHandler = lambda image: recognizer.__setattr__('input', image)
+  recognizer.outputHandler = outputHandler
 
   extractor.input = image
   return output['value']
@@ -105,7 +105,11 @@ def trainWithSamples(folder):
   fileList = glob.glob('{}/*jpg'.format(folder))
   extractor = DigitalCounterExtraction(PARAMS['extraction'], False)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
+  cleaner = DigitsCleaner(PARAMS['cleaner'], False)
+  recognition = DigitRecognition()
+
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
+  breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
 
   counter = {}
   hogdata = []
@@ -122,7 +126,7 @@ def trainWithSamples(folder):
 
     def outputHandler(digitsImages):
       for image in digitsImages:
-        hog = hog_of_digit(image)
+        hog =recognition.hog_of_digit(image)
         expected = result.pop(0)
 
         if len(hog) == 81:
@@ -135,7 +139,7 @@ def trainWithSamples(folder):
         else:
           print("{}: error - invalid HOG - len={}".format(filename, len(hog)))
 
-    breaker.outputHandler = outputHandler
+    cleaner.outputHandler = outputHandler
     try:
       extractor.input = filename
     except Exception as e:
@@ -156,10 +160,12 @@ def trainWithSamples(folder):
 def testSamples(folder):
   extractor = DigitalCounterExtraction(PARAMS['extraction'], False)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
-  recognizer = DigitsRecognizer(PARAMS['recognizer'], False)
+  cleaner = DigitsCleaner(PARAMS['cleaner'], False)
+  recognizer = DigitsRecognizer(PARAMS['recognizer'])
 
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
-  breaker.outputHandler = lambda image: recognizer.__setattr__('input', image)
+  breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
+  cleaner.outputHandler = lambda image: recognizer.__setattr__('input', image)
 
   stats = {}
   for filename in glob.glob("{}/*.txt".format(folder)):
@@ -168,8 +174,16 @@ def testSamples(folder):
     def outputHandler(recognizedDigits):
       recognized = "".join(map(str, recognizedDigits))
       expected = open(filename).read()
-      print("{}: Recognized={} Expected={} Gagne={}".format(imageName, recognized, expected, recognized == expected))
-      stats[imageName] = { 'recognized': recognized, 'expected': expected }
+
+      # limit our efforts to the 5 left digits
+      if len(recognized) == 8 and len(expected) == 8:
+        recognized=recognized[0:5]
+        expected=expected[0:5]
+
+        print("{}: Recognized={} Expected={} Gagne={}".format(imageName, recognized, expected, recognized == expected))
+        stats[imageName] = { 'recognized': recognized, 'expected': expected }
+      else:
+        print("{}: Ignoring bogus - Recognized={} Expected={}".format(imageName, recognized, expected))
     recognizer.outputHandler = outputHandler
     try:
       extractor.input = imageName
@@ -192,6 +206,7 @@ def testSamples(folder):
   total = 0
   successDigits = 0
   totalDigits = 0
+
   for fn in stats:
     if stats[fn]['recognized'] == stats[fn]['expected']:
       success = success + 1
@@ -200,11 +215,31 @@ def testSamples(folder):
     else:
       successDigits = successDigits + countSimilarDigits(stats[fn]['recognized'], stats[fn]['expected'])
       totalDigits = totalDigits + len(stats[fn]['expected'])
-
     total = total + 1
 
   print("{} recognized out of {} images => {:.0%}".format(success, total, success/total))
   print("{} recognized out of {} digits => {:.0%}".format(successDigits, totalDigits, successDigits/totalDigits))
+
+  perDigits = dict()
+  for i in range(0, 10):
+    perDigits["{}".format(i)] = { 'expected': 0, 'recognized': 0 }
+
+  for fn in stats:
+    expected = stats[fn]['expected']
+    recognized = stats[fn]['recognized']
+    if len(expected) == len(recognized):
+      for i in range(0, len(expected)):
+        expectedDigit = stats[fn]['expected'][i]
+        foundDigit = stats[fn]['recognized'][i]
+
+        perDigits[expectedDigit]['expected'] = perDigits[expectedDigit]['expected'] + 1
+        if expectedDigit == foundDigit:
+          perDigits[expectedDigit]['recognized'] = perDigits[expectedDigit]['recognized'] + 1
+    else:
+      print("lengths do not match {} <> {}".format(stats[fn]['recognized'], stats[fn]['expected']))
+
+  for k in sorted(perDigits.keys()):
+    print("{}: {}/{} - {:.0%}".format(k, perDigits[k]['recognized'], perDigits[k]['expected'], perDigits[k]['recognized']/perDigits[k]['expected']))
 
 def main():
   parser = argparse.ArgumentParser()
@@ -237,76 +272,3 @@ def main():
 
 if __name__ == '__main__':
   main()
-
-
-
-
-# Old training method: digit by digit. Now we use the whole image and a manual
-# reading of the image. Much easier and can be used for testing as well.
-
-# def train(images):
-#   extractor = DigitalCounterExtraction(PARAMS['extraction'], False)
-#   breaker = DigitsBreaker(PARAMS['breaker'], False)
-#   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
-
-#   for image in images:
-#     def digit_processor(digits):
-#       for index,d in enumerate(digits):
-#         ask_and_save(d, index)
-#     def ask_and_save(d, index):
-#       (w,h) = d.shape[:2]
-#       cv2.imshow('digit', cv2.resize(d, (h*8, w*8)))
-#       key = cv2.waitKey(0)
-
-#       if (key >= ord('0') and key <= ord('9')) or key == ord(' '):
-#         if key == ord(' '):
-#           key = ord('x')
-
-#         fname = 'trainingdata/{}-{}_{}.png'.format(os.path.basename(image), index, chr(key))
-#         print("Saving {} -> {}".format(chr(key), fname))
-#         cv2.imwrite(fname, d)
-#       elif key == ord('q'):
-#         sys.exit(0)
-
-#     print("Processing: {}".format(image))
-#     breaker.outputHandler = digit_processor
-
-#     # This triggers the processing, the callbacks, etc.
-#     extractor.input = image
-
-# def learn():
-#   counter = {}
-
-#   hogdata = []
-#   results = []
-
-#   for filename in glob.glob('trainingdata/*png'):
-#     digit = filename.split('_')[1][0]
-#     image = cv2.imread(filename)
-#     hog = hog_of_digit(image)
-#     if not digit in counter:
-#       counter[digit] = 0
-#     counter[digit] = counter[digit] + 1
-#     if len(hog) > 0:
-#       print("{}: {}=>{}".format(filename, repr(hog.shape), digit))
-#       if digit != 'x':
-#         hogdata.append(hog)
-#         results.append(digit)
-#     else:
-#       print("{}: error getting hog".format(filename))
-
-#   total = sum(counter.values())
-#   for k in sorted(counter.keys()):
-#     print("{}: {} - {:.0%}".format(k, counter[k], counter[k]/total))
-
-#   svm = cv2.ml.SVM_create()
-#   svm.setKernel(cv2.ml.SVM_RBF)
-#   # svm.setType(cv2.ml.SVM_C_SVC)
-
-#   trainingData = np.float32(hogdata).reshape(-1,81)
-#   trainingResult = np.asarray(results, dtype=int)[:,np.newaxis]
-
-#   svm.trainAuto(trainingData, cv2.ml.ROW_SAMPLE, trainingResult)
-#   svm.save('svm_data.dat')
-#   print("SVM Model saved!")
-
