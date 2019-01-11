@@ -11,8 +11,11 @@ class DigitsBreaker(VisibleStage):
   def _process(self):
     digitsImage = self.input
 
-    (h, w) = digitsImage.shape[:2]
+    if digitsImage is None:
+      self.outputHandler([])
+      return
 
+    (h, w) = digitsImage.shape[:2]
     digits = []
     for i in range(8):
       x1 = i * int(w / 8)

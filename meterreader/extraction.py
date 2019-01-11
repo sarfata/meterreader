@@ -44,7 +44,7 @@ class DigitalCounterExtraction(VisibleStage):
       rect = cv2.boundingRect(contour)
       extracted = image[int(rect[1]):int(rect[1]+rect[3]), int(rect[0]):int(rect[0]+rect[2])]
     else:
-      extracted = np.zeros((20,135,3))
+      print("Error: {} Unable to find contour of digits in image".format(self.input))
 
     # We are done - Do some presentation of the output
     if self._showYourWork:
@@ -63,8 +63,11 @@ class DigitalCounterExtraction(VisibleStage):
 
       # Draw the output image and the extracted counter in a separate window.
       cv2.imshow('Extraction', imutils.resize(output, height=800))
-      (h, w) = extracted.shape[:2]
-      cv2.imshow('extracted', cv2.resize(extracted, (w*4,h*4)))
+      if extracted is not None:
+        (h, w) = extracted.shape[:2]
+        cv2.imshow('extracted', cv2.resize(extracted, (w*4,h*4)))
+      else:
+        cv2.imshow('extracted', np.zeros((20*4, 135*4, 3)))
 
     self.outputHandler(extracted)
 
@@ -98,6 +101,9 @@ class DigitalCounterExtraction(VisibleStage):
   def contour_filter(self, c):
     rect = cv2.boundingRect(c)
     (w, h) = (rect[2:])
+    # be even more specific to reject wrong contours...
+    if h < 20 or h > 25 or w < 130 or w > 140:
+      return False
     if w > h and w/h > 6 and w/h < 7:
       return True
     return False

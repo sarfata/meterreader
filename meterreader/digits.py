@@ -17,7 +17,7 @@ class DigitsCleaner(VisibleStage):
   def _process(self):
     output = []
     if self._showYourWork:
-      (self.debugDigitHeight, self.debugDigitWidth) = self.input[0].shape[:2]
+      (self.debugDigitHeight, self.debugDigitWidth) = (20, 17)
       # 20px + image + 20px margin + image + 20px margin + ...
       self.debugWidth = 20 + len(self.input) * (self.debugDigitWidth + 20)
       # 20px top margin + image + 20px margin  (3 times for three lines in the output)

@@ -9,6 +9,7 @@ import sys
 import os.path
 import glob
 import random
+import traceback
 from meterreader import DigitalCounterExtraction, DigitsBreaker, DigitsCleaner, DigitsRecognizer, DigitRecognition
 
 PARAMS = {
@@ -126,36 +127,16 @@ def trainWithSamples(folder):
 
     def outputHandler(digitsImages):
       for image in digitsImages:
-        hog =recognition.hog_of_digit(image)
-        expected = result.pop(0)
-
-        if len(hog) == 81:
-          hogdata.append(hog)
-          results.append(expected)
-          if not expected in counter:
-            counter[expected] = 0
-          counter[expected] = counter[expected] + 1
-          print("{}: added {} samples".format(filename, len(digitsImages)))
-        else:
-          print("{}: error - invalid HOG - len={}".format(filename, len(hog)))
+        recognition.train(image, result.pop(0))
 
     cleaner.outputHandler = outputHandler
     try:
       extractor.input = filename
     except Exception as e:
       print("{}: Error {}".format(filename, e))
+      traceback.print_tb(e.__traceback__)
 
-  total = sum(counter.values())
-  for k in sorted(counter.keys()):
-    print("{}: {} - {:.0%}".format(k, counter[k], counter[k]/total))
-
-  svm = cv2.ml.SVM_create()
-  svm.setKernel(cv2.ml.SVM_RBF)
-  trainingData = np.float32(hogdata).reshape(-1,81)
-  trainingResult = np.asarray(results, dtype=int)[:,np.newaxis]
-  svm.trainAuto(trainingData, cv2.ml.ROW_SAMPLE, trainingResult)
-  svm.save('svm_data.dat')
-  print("SVM Model saved!")
+  recognition.saveModel()
 
 def testSamples(folder):
   extractor = DigitalCounterExtraction(PARAMS['extraction'], False)
@@ -175,10 +156,10 @@ def testSamples(folder):
       recognized = "".join(map(str, recognizedDigits))
       expected = open(filename).read()
 
-      # limit our efforts to the 5 left digits
       if len(recognized) == 8 and len(expected) == 8:
-        recognized=recognized[0:5]
-        expected=expected[0:5]
+        # limit our efforts to 7 digits because the last one is hard.
+        recognized=recognized[0:7]
+        expected=expected[0:7]
 
         print("{}: Recognized={} Expected={} Gagne={}".format(imageName, recognized, expected, recognized == expected))
         stats[imageName] = { 'recognized': recognized, 'expected': expected }
