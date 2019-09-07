@@ -10,9 +10,13 @@ import os.path
 import glob
 import random
 import traceback
-from meterreader import DigitalCounterExtraction, DigitsBreaker, DigitsCleaner, DigitsRecognizer, DigitRecognition
+import re
+from meterreader import DigitalCounterExtraction, DigitsBreaker, DigitsCleaner, DigitsRecognizer, DigitRecognition, MakeHorizontal
 
 PARAMS = {
+  'horizontality': {
+
+  },
   'extraction': {
     'thrs1': 143,
     'thrs2': 50,
@@ -23,8 +27,8 @@ PARAMS = {
     'numdigits': 8
   },
   'cleaner': {
-    'blur': 1,
-    'thrs1': 0,
+    'blur': 0,
+    'thrs1': 90,
     'thrs2': 255
   },
   'recognizer': {
@@ -33,18 +37,20 @@ PARAMS = {
 }
 
 def experiment(images):
+  makeHorizontal = MakeHorizontal(PARAMS['horizontality'], False)
   extractor = DigitalCounterExtraction(PARAMS['extraction'], True)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
   cleaner = DigitsCleaner(PARAMS['cleaner'], True)
   recognizer = DigitsRecognizer(PARAMS['recognizer'])
 
+  makeHorizontal.outputHandler = lambda image: extractor.__setattr__('input', image)
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
   breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
   cleaner.outputHandler = lambda digits: recognizer.__setattr__('input', digits)
   recognizer.outputHandler = lambda digits: print("Reco output: {}".format(repr(digits)))
 
   imageIndex = 0
-  extractor.input = images[imageIndex]
+  makeHorizontal.input = cv2.imread(images[imageIndex])
   while (True):
     print("waiting for key")
     key = cv2.waitKey(0)
@@ -54,14 +60,15 @@ def experiment(images):
       break
     elif key == ord('p') or key == 2:
       imageIndex = (imageIndex - 1) % len(images)
-      extractor.input = images[imageIndex]
+      makeHorizontal.input = cv2.imread(images[imageIndex])
     elif key == ord('n') or key == 3:
       imageIndex = (imageIndex + 1) % len(images)
-      extractor.input = images[imageIndex]
+      makeHorizontal.input = cv2.imread(images[imageIndex])
   else:
       print("Key pressed: {}".format(key))
 
 def extract(image):
+  makeHorizontal = MakeHorizontal(PARAMS['horizontality'], False)
   extractor = DigitalCounterExtraction(PARAMS['extraction'], True)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
   cleaner = DigitsCleaner(PARAMS['cleaner'], True)
@@ -71,12 +78,13 @@ def extract(image):
   def outputHandler(v):
     output['value'] = "".join(map(str, v))
 
+  makeHorizontal.outputHandler = lambda image: extractor.__setattr__('input', image)
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
   breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
   cleaner.outputHandler = lambda image: recognizer.__setattr__('input', image)
   recognizer.outputHandler = outputHandler
 
-  extractor.input = image
+  makeHorizontal.input = cv2.imread(image)
   return output['value']
 
 def labelSamples(folder):
@@ -104,11 +112,14 @@ def labelSamples(folder):
 
 def trainWithSamples(folder):
   fileList = glob.glob('{}/*jpg'.format(folder))
+
+  makeHorizontal = MakeHorizontal(PARAMS['horizontality'], False)
   extractor = DigitalCounterExtraction(PARAMS['extraction'], False)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
   cleaner = DigitsCleaner(PARAMS['cleaner'], False)
   recognition = DigitRecognition()
 
+  makeHorizontal.outputHandler = lambda image: extractor.__setattr__('input', image)
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
   breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
 
@@ -131,7 +142,7 @@ def trainWithSamples(folder):
 
     cleaner.outputHandler = outputHandler
     try:
-      extractor.input = filename
+      makeHorizontal.input = cv2.imread(filename)
     except Exception as e:
       print("{}: Error {}".format(filename, e))
       traceback.print_tb(e.__traceback__)
@@ -139,11 +150,13 @@ def trainWithSamples(folder):
   recognition.saveModel()
 
 def testSamples(folder):
+  makeHorizontal = MakeHorizontal(PARAMS['horizontality'], False)
   extractor = DigitalCounterExtraction(PARAMS['extraction'], False)
   breaker = DigitsBreaker(PARAMS['breaker'], False)
   cleaner = DigitsCleaner(PARAMS['cleaner'], False)
   recognizer = DigitsRecognizer(PARAMS['recognizer'])
 
+  makeHorizontal.outputHandler = lambda image: extractor.__setattr__('input', image)
   extractor.outputHandler = lambda image: breaker.__setattr__('input', image)
   breaker.outputHandler = lambda image: cleaner.__setattr__('input', image)
   cleaner.outputHandler = lambda image: recognizer.__setattr__('input', image)
@@ -167,7 +180,7 @@ def testSamples(folder):
         print("{}: Ignoring bogus - Recognized={} Expected={}".format(imageName, recognized, expected))
     recognizer.outputHandler = outputHandler
     try:
-      extractor.input = imageName
+      makeHorizontal.input = cv2.imread(imageName)
     except Exception as e:
       print("{}: Error {}".format(imageName, e))
 
@@ -222,6 +235,24 @@ def testSamples(folder):
   for k in sorted(perDigits.keys()):
     print("{}: {}/{} - {:.0%}".format(k, perDigits[k]['recognized'], perDigits[k]['expected'], perDigits[k]['recognized']/perDigits[k]['expected']))
 
+def processImages(folder):
+  results = dict()
+  for filename in glob.glob("{}/*.jpg".format(folder)):
+    match = re.search(r"image-(.*).jpg", filename)
+    if (match):
+      date = match.group(1)
+      try:
+        results[date] = extract(filename)
+      except KeyboardInterrupt:
+        sys.exit(0)
+      except Exception as e:
+        print("{}: {}".format(filename, e))
+    else:
+      print("{}: Unrecognized filename", filename)
+
+  for date in sorted(results.keys()):
+    print("{},{}".format(date, results[date]))
+
 def main():
   parser = argparse.ArgumentParser()
 
@@ -230,18 +261,29 @@ def main():
   exfd = subparsers.add_parser('experiment')
   exfd.add_argument('images', nargs='+')
 
-  xd = subparsers.add_parser('extract-digits').add_argument("image")
+  xd = subparsers.add_parser('extract-digits').add_argument("images", nargs='+')
 
   subparsers.add_parser('label-samples').add_argument("folder")
   subparsers.add_parser('test-samples').add_argument("folder")
   subparsers.add_parser('train-samples').add_argument("folder")
+  subparsers.add_parser('process-images').add_argument("folder")
 
   args = parser.parse_args()
 
   if args.subparser_name == 'experiment':
     experiment(args.images)
   elif args.subparser_name == 'extract-digits':
-    print(extract(args.image))
+    for image in args.images:
+      result = None
+      try:
+        result = extract(image)
+        print("{}: {}".format(image, result))
+      except KeyboardInterrupt as kbe:
+        sys.exit(0)
+      except:
+        print("{}: Error {}".format(image, sys.exc_info()))
+  elif args.subparser_name == 'process-images':
+    processImages(args.folder)
   elif args.subparser_name == 'label-samples':
     labelSamples(args.folder)
   elif args.subparser_name == 'train-samples':

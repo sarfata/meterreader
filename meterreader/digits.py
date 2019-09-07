@@ -38,7 +38,7 @@ class DigitsCleaner(VisibleStage):
       blur = cv2.GaussianBlur(grayImage,(self.params['blur'],self.params['blur']),0)
     else:
       blur = grayImage
-    _, threshold = cv2.threshold(blur,self.params['thrs1'],self.params['thrs2'],cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    _, threshold = cv2.threshold(blur,self.params['thrs1'],self.params['thrs2'],cv2.THRESH_BINARY) # +cv2.THRESH_OTSU - overrides default
 
     def filter_contour(cnt):
       rect = cv2.boundingRect(cnt)
@@ -56,8 +56,7 @@ class DigitsCleaner(VisibleStage):
       return True
 
     # Find contours in the image.
-    cnts = cv2.findContours(threshold.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+    cnts, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
 
     # Select one of the contours
@@ -66,12 +65,15 @@ class DigitsCleaner(VisibleStage):
     # Extract the content of this contour
     digit = extract_contour(threshold, best_contour)
 
+    # Make sure we always have the same output size
+    digit = cv2.resize(digit, (40, 36))
+
     if self._showYourWork:
       self.draw_debug_image(index, 0, image)
       self.draw_debug_image(index, 1, blur)
       self.draw_debug_image(index, 2, threshold)
       self.draw_debug_image(index, 3, draw_contours(threshold, cnts, filter_contour))
-      self.draw_debug_image(index, 4, digit)
+      #self.draw_debug_image(index, 4, digit)
 
       self.draw_result(index, self.recognizer.recognize(digit))
 

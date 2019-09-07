@@ -1,5 +1,5 @@
 .env
-img
+img*
 .DS_Store
 .Python
 digits/
@@ -8,3 +8,7 @@ canny.png
 extracted.png
 *.pyc
 svm_data.dat
+samples
+knn_model.pkl
+last-digit-error.png
+tags

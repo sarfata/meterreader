@@ -12,3 +12,6 @@ getimages:
 clean:
 	rm -rf digits
 	mkdir digits
+
+downloadfroms3:
+	echo "Run something like aws s3 cp s3://metering-vanves/img img --recursive --exclude '*' --include 'image-2019*-0900*jpg'"

@@ -7,7 +7,7 @@ from . import VisibleStage
 
 '''
 A 'Stage' transformation:
- - input: an image name to load from disk
+ - input: an image
  - output: an image of the gazmeter counter
 '''
 class DigitalCounterExtraction(VisibleStage):
@@ -33,7 +33,7 @@ class DigitalCounterExtraction(VisibleStage):
     self.params = params
 
   def _process(self):
-    image = cv2.imread(self.input)
+    image = self.input
 
     canny = self.prepare_canny_image(image)
     contours = self.find_contours(canny)
@@ -44,14 +44,14 @@ class DigitalCounterExtraction(VisibleStage):
       rect = cv2.boundingRect(contour)
       extracted = image[int(rect[1]):int(rect[1]+rect[3]), int(rect[0]):int(rect[0]+rect[2])]
     else:
-      print("Error: {} Unable to find contour of digits in image".format(self.input))
+      raise Exception("Unable to find contour of digits in image")
 
     # We are done - Do some presentation of the output
     if self._showYourWork:
       # Make output image a copy of the canny image with colors and then draw
       # contours in it.
       output = cv2.cvtColor(canny, cv2.COLOR_GRAY2BGR)
-      cv2.putText(output, self.input, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, cv2.LINE_AA)
+      #cv2.putText(output, self.input, (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, cv2.LINE_AA)
       self.show_contours(contours, output)
 
       # Draw contour in the output
@@ -81,9 +81,8 @@ class DigitalCounterExtraction(VisibleStage):
   # Step2: Identify contours in image to isolate objects
   def find_contours(self, cannyImage):
     # find contours in the edge map
-    cnts = cv2.findContours(cannyImage.copy(), cv2.RETR_TREE,
+    cnts, _ = cv2.findContours(cannyImage, cv2.RETR_TREE,
       cv2.CHAIN_APPROX_SIMPLE)
-    cnts = cnts[0] if imutils.is_cv2() else cnts[1]
     return cnts
 
   # Step3: Select the best contour in the image
@@ -102,8 +101,8 @@ class DigitalCounterExtraction(VisibleStage):
     rect = cv2.boundingRect(c)
     (w, h) = (rect[2:])
     # be even more specific to reject wrong contours...
-    if h < 20 or h > 25 or w < 130 or w > 140:
-      return False
+    # if h < 20 or h > 25 or w < 130 or w > 140:
+    #   return False
     if w > h and w/h > 6 and w/h < 7:
       return True
     return False
@@ -117,17 +116,4 @@ class DigitalCounterExtraction(VisibleStage):
       cv2.drawContours(output, [c], 0, (200, 100, 100), 1)
       rect = cv2.boundingRect(c)
       cv2.rectangle(output, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), color, 1)
-
-
-
-# def experiment_extraction(images):
-#   imageIndex = 0
-#   image = cv2.imread(images[imageIndex])
-
-#   def slider_moved(x):
-#     update_image()
-
-#   for key in PARAMS.keys():
-#       cv2.createTrackbar(key, 'experiment', PARAMS[key], 255, slider_moved)
-
 

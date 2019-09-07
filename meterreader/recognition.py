@@ -2,7 +2,10 @@ import cv2
 import numpy as np
 import os.path
 from .stage import Stage
-
+from skimage.feature import hog
+from sklearn.model_selection import  train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.externals import joblib
 
 class DigitRecognition(object):
   svm = None
@@ -16,7 +19,23 @@ class DigitRecognition(object):
     else:
       print("Warning! No SVM model found. Train the model!!")
 
+    if os.path.exists('knn_model.pkl'):
+      self.knn = joblib.load('knn_model.pkl')
+    else:
+      print("Warning! No KNN model found. Train the model!")
+
   def recognize(self, image):
+    return self.recognizeSVM(image)
+
+  def recognizeKNN(self, image):
+    df = self.hog_of_digit(image)
+    predict = self.knn.predict(df.reshape(1,-1))[0]
+    predict_proba = self.knn.predict_proba(df.reshape(1,-1))
+
+    print("Predict: {} with proba {}".format(predict, predict_proba[0][predict]))
+    return predict
+
+  def recognizeSVM(self, image):
     imageHash = self.hog_of_digit(image)
 
     # do the detection so we can draw it
@@ -30,7 +49,7 @@ class DigitRecognition(object):
 
   def train(self, image, expected):
     hog = self.hog_of_digit(image)
-    if len(hog) == 81:
+    if len(hog) == 486:
       self.hogdata.append(hog)
       self.results.append(expected)
       if expected not in self.learningStats:
@@ -41,16 +60,52 @@ class DigitRecognition(object):
       raise Exception("error - invalid HOG - len={} - see last-digit-error.png".format(len(hog)))
 
   def saveModel(self):
+    print("Training SVM")
+    self.saveModelSVM()
+    print("Training KNN")
+    self.saveModelKNN()
+
+  def saveModelSVM(self):
     svm = cv2.ml.SVM_create()
     svm.setKernel(cv2.ml.SVM_RBF)
-    trainingData = np.float32(self.hogdata).reshape(-1,81)
-    trainingResult = np.asarray(self.results, dtype=int)[:,np.newaxis]
+    trainingData = np.float32(self.hogdata)#.reshape(-1,81)
+    trainingResult = np.asarray(self.results, dtype=int)#[:,np.newaxis]
+
+    print("TrainingData={} TrainingResult={}".format(trainingData.shape, trainingResult.shape))
     svm.trainAuto(trainingData, cv2.ml.ROW_SAMPLE, trainingResult)
     svm.save('svm_data.dat')
 
     total = sum(self.learningStats.values())
     for k in sorted(self.learningStats.keys()):
       print("{}: {} - {:.0%}".format(k, self.learningStats[k], self.learningStats[k]/total))
+
+  def saveModelKNN(self):
+    trainingData = np.float32(self.hogdata).reshape(-1, 81)
+    trainingResult = np.asarray(self.results, dtype=int)
+
+    # store features array into a numpy array
+    features  = np.array(trainingData, 'float64')
+
+    print("TrainingData={} TrainingResult={}".format(trainingData.shape, trainingResult.shape))
+
+    # split the labled dataset into training / test sets
+    X_train, X_test, y_train, y_test = train_test_split(features, trainingResult)
+    # train using K-NN
+    knn = KNeighborsClassifier(n_neighbors=3)
+    knn.fit(X_train, y_train)
+    # get the model accuracy
+    model_score = knn.score(X_test, y_test)
+
+    print("KNN model_score: {}".format(model_score))
+
+    # save trained model
+    joblib.dump(knn, 'knn_model.pkl')
+
+  # does not work - need to tweak the params
+  def hog_of_digit_skimage(self, image):
+    df= hog(image, orientations=8, pixels_per_cell=(10,10), cells_per_block=(5, 5))
+    print(df)
+    return df
 
   def hog_of_digit(self, image):
     winSize = (20,20)

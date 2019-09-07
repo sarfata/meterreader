@@ -1,13 +1,56 @@
 # Gazmeter
 
+## Good resources
 
-## Dependencies
+### Installing OpenCV (2019 new mac Edition)
 
-* Python3 + OpenCV3
-  A bit hard to install on os X ... see:
-  https://www.pyimagesearch.com/2016/12/19/install-opencv-3-on-macos-with-homebrew-the-easy-way/
+    brew install python3
+    brew postinstall python3 (for pip)
+    pip3 install -r requirements.txt (will install opencv-python prebuilt binaries)
+    python3 / import cv2 / cv2.__version__ => 4.1.1
+
+### KNN
+
+- https://towardsdatascience.com/scanned-digits-recognition-using-k-nearest-neighbor-k-nn-d1a1528f0dea
+- https://stackoverflow.com/questions/9413216/simple-digit-recognition-ocr-in-opencv-python
+
+### Download from S3
+
+    aws s3 cp s3://metering-vanves/img . --recursive --exclude '*' --include 'image-2019*-0900*jpg'
 
 ## Notes
+
+### Version of Jan 11 2019
+
+SVM recognition:
+
+46 recognized out of 79 images => 58%
+516 recognized out of 553 digits => 93%
+0: 25/26 - 96%
+1: 183/183 - 100%
+2: 22/36 - 61%
+3: 31/33 - 94%
+4: 32/34 - 94%
+5: 86/88 - 98%
+6: 49/50 - 98%
+7: 19/26 - 73%
+8: 35/42 - 83%
+9: 34/35 - 97%
+
+KNN recognition:
+
+26 recognized out of 78 images => 33%
+467 recognized out of 546 digits => 86%
+0: 22/26 - 85%
+1: 178/181 - 98%
+2: 22/36 - 61%
+3: 21/33 - 64%
+4: 32/34 - 94%
+5: 77/86 - 90%
+6: 37/50 - 74%
+7: 18/26 - 69%
+8: 27/40 - 68%
+9: 33/34 - 97%
 
 ### Version of Jan 9 2019
 
@@ -55,7 +98,6 @@
     9: 39 - 9%
     SVM Model saved!
 
-   ./meterreader.py test-samples img
-   13 recognized out of 54 images => 24%
-   357 recognized out of 424 digits => 84%
-
+./meterreader.py test-samples img
+13 recognized out of 54 images => 24%
+357 recognized out of 424 digits => 84%
