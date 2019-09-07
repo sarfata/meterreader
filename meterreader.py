@@ -54,8 +54,17 @@ def experiment(images):
     recognizer.outputHandler = lambda digits: print(
         "Reco output: {}".format(repr(digits)))
 
+    def select_image(idx):
+        try:
+            image = cv2.imread(images[idx])
+            if image is None:
+                raise Exception("Unable to read image.")
+            makeHorizontal.input = image
+        except Exception as e:
+            print("{}: {}".format(images[idx], e), file=sys.stderr)
+
     imageIndex = 0
-    makeHorizontal.input = cv2.imread(images[imageIndex])
+    select_image(imageIndex)
     while (True):
         print("waiting for key")
         key = cv2.waitKey(0)
@@ -65,10 +74,10 @@ def experiment(images):
             break
         elif key == ord('p') or key == 2:
             imageIndex = (imageIndex - 1) % len(images)
-            makeHorizontal.input = cv2.imread(images[imageIndex])
+            select_image(imageIndex)
         elif key == ord('n') or key == 3:
             imageIndex = (imageIndex + 1) % len(images)
-            makeHorizontal.input = cv2.imread(images[imageIndex])
+            select_image(imageIndex)
     else:
         print("Key pressed: {}".format(key))
 
@@ -313,7 +322,7 @@ def main():
             try:
                 result = extract(image)
                 print("{}: {}".format(image, result))
-            except KeyboardInterrupt as kbe:
+            except KeyboardInterrupt:
                 sys.exit(0)
             except:
                 print("{}: Error {}".format(image, sys.exc_info()))
