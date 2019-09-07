@@ -1,22 +1,38 @@
 # Gazmeter
 
-## Good resources
+## Installation
 
-### Installing OpenCV (2019 new mac Edition)
+### MacOS
 
     brew install python3
     brew postinstall python3 (for pip)
     pip3 install -r requirements.txt (will install opencv-python prebuilt binaries)
     python3 / import cv2 / cv2.__version__ => 4.1.1
 
+## Using
+
+Get images from Amazon:
+
+    aws s3 cp s3://metering-vanves/img img --recursive --exclude '*' --include 'image-2019*-0900*jpg'
+
+Label some images:
+
+    python3 meterreader.py label-samples img
+
+For each image shown, click on the image window and type the digit you see. Press enter when done. This will add a txt file next to each image with the value.
+
+Test recognition:
+
+    python3 meterreader.py test-samples img
+
+## Good resources
+
+### Installing OpenCV (2019 new mac Edition)
+
 ### KNN
 
 - https://towardsdatascience.com/scanned-digits-recognition-using-k-nearest-neighbor-k-nn-d1a1528f0dea
 - https://stackoverflow.com/questions/9413216/simple-digit-recognition-ocr-in-opencv-python
-
-### Download from S3
-
-    aws s3 cp s3://metering-vanves/img . --recursive --exclude '*' --include 'image-2019*-0900*jpg'
 
 ## Notes
 
