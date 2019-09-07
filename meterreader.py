@@ -269,7 +269,7 @@ def processImages(folder):
             date = match.group(1)
             try:
                 parsed_date = datetime.datetime.strptime(date, "%Y%m%d-%H%M%S")
-                date = parsed_date.strftime("%Y%m%d %H%M%S"))
+                date = parsed_date.strftime("%Y%m%d %H%M%S")
             except Exception as e:
                 print("{}: date error {}".format(filename, e), file=sys.stderr)
                 pass
