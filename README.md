@@ -15,6 +15,10 @@ Get images from Amazon:
 
     aws s3 cp s3://metering-vanves/img img --recursive --exclude '*' --include 'image-2019*-0900*jpg'
 
+Experiment:
+
+    ./meterreader.py experiment img201911/*jpg
+
 Label some images:
 
     python3 meterreader.py label-samples img
@@ -24,6 +28,10 @@ For each image shown, click on the image window and type the digit you see. Pres
 Test recognition:
 
     python3 meterreader.py test-samples img
+
+Process an entire folder of images:
+
+    ./meterreader.py process-images img201911
 
 ## Good resources
 
