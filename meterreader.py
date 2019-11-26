@@ -21,7 +21,7 @@ PARAMS = {
     'extraction': {
         'thrs1': 143,
         'thrs2': 50,
-        'blur': 3,
+        'blur': 5,
         'epsilon': 10
     },
     'breaker': {
@@ -29,8 +29,8 @@ PARAMS = {
     },
     'cleaner': {
         'blur': 0,
-        'thrs1': 90,
-        'thrs2': 255
+        'thrs1': 59,
+        'thrs2': 130
     },
     'recognizer': {
 
@@ -39,7 +39,7 @@ PARAMS = {
 
 
 def experiment(images):
-    makeHorizontal = MakeHorizontal(PARAMS['horizontality'], False)
+    makeHorizontal = MakeHorizontal(PARAMS['horizontality'], True)
     extractor = DigitalCounterExtraction(PARAMS['extraction'], True)
     breaker = DigitsBreaker(PARAMS['breaker'], False)
     cleaner = DigitsCleaner(PARAMS['cleaner'], True)
@@ -56,6 +56,7 @@ def experiment(images):
 
     def select_image(idx):
         try:
+            print("-- {}".format(images[idx]))
             image = cv2.imread(images[idx])
             if image is None:
                 raise Exception("Unable to read image.")
@@ -292,8 +293,26 @@ def processImages(folder):
         else:
             print("{}: Unrecognized filename", filename, file=sys.stderr)
 
+    last = None
+    nonvalid = 0
+
     for date in sorted(results.keys()):
-        print("{},{}".format(date, results[date]))
+        valid = True
+
+        if last is not None:
+            if int(results[date]) < last:
+                valid = False
+            elif int(results[date]) > last + 10000:
+                valid = False
+
+        print("{},{},{}".format(date, results[date], valid))
+
+        if not valid:
+            nonvalid = nonvalid + 1
+        else:
+            last = int(results[date])
+
+    print("{} bogus results out of {}".format(nonvalid, len(results.keys())))
 
 
 def main():

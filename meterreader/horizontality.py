@@ -3,38 +3,44 @@ import numpy as np
 import cv2
 from .stage import VisibleStage
 
+
 class MakeHorizontal(VisibleStage):
-  def _process(self):
-    originalImage = self.input
-    image = imutils.resize(originalImage, height=1000)
-    grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurredImage = cv2.GaussianBlur(grayImage, (5, 5), 0)
-    cannyImage = cv2.Canny(blurredImage, 1, 200)
-    lines = cv2.HoughLines(cannyImage,1,np.pi/180,100)
+    def _process(self):
+        debugImage = None
+        if self._showYourWork:
+            debugImage = self.input.copy()
 
-    averageAngles = []
-    for l in lines:
-      [rho, theta] = l[0]
-      a = np.cos(theta)
-      b = np.sin(theta)
-      x0 = a*rho
-      y0 = b*rho
-      x1 = int(x0 + 1000*(-b))
-      y1 = int(y0 + 1000*(a))
-      x2 = int(x0 - 1000*(-b))
-      y2 = int(y0 - 1000*(a))
-#      cv2.line(image,(x1,y1),(x2,y2),(0,0,255),2)
+        originalImage = self.input
+        image = imutils.resize(originalImage, height=1000)
+        grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurredImage = cv2.GaussianBlur(grayImage, (5, 5), 0)
+        cannyImage = cv2.Canny(blurredImage, 1, 200)
+        lines = cv2.HoughLines(cannyImage, 1, np.pi/180, 100)
 
-      thetaDeg = theta / np.pi * 180.
-      #print("Line x0={} Angle={}".format(rho, thetaDeg))
-      if thetaDeg > 60 and thetaDeg < 120:
-        averageAngles.append(thetaDeg)
+        averageAngles = []
+        for l in lines:
+            [rho, theta] = l[0]
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a*rho
+            y0 = b*rho
+            x1 = int(x0 + 1000*(-b))
+            y1 = int(y0 + 1000*(a))
+            x2 = int(x0 - 1000*(-b))
+            y2 = int(y0 - 1000*(a))
 
-    averageAngle = sum(averageAngles) / len(averageAngles)
-    rotated = imutils.rotate(originalImage, averageAngle - 90)
+            thetaDeg = theta / np.pi * 180.
+            if thetaDeg > 60 and thetaDeg < 120:
+                averageAngles.append(thetaDeg)
 
-    # We are done - Do some presentation of the output
-    if self._showYourWork:
-      pass
+        averageAngle = sum(averageAngles) / len(averageAngles)
+        rotated = imutils.rotate(originalImage, averageAngle - 90)
 
-    self.outputHandler(rotated)
+        if self._showYourWork:
+            cv2.line(debugImage, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.imshow('Horizontality', rotated)
+
+        self.outputHandler(rotated)
+
+    def initWindows(self):
+        cv2.namedWindow('Horizontality')
