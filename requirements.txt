@@ -2,3 +2,4 @@ imutils
 opencv-python
 scikit-image
 scikit-learn
+influxdb

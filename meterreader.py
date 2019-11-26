@@ -8,11 +8,12 @@ import numpy as np
 import imutils
 import sys
 import os.path
+import os
 import glob
 import random
 import traceback
-import re
-from meterreader import DigitalCounterExtraction, DigitsBreaker, DigitsCleaner, DigitsRecognizer, DigitRecognition, MakeHorizontal
+from meterreader import DigitalCounterExtraction, DigitsBreaker, DigitsCleaner, DigitsRecognizer, DigitRecognition, MakeHorizontal, parse_filename_date
+from influxdb import InfluxDBClient
 
 PARAMS = {
     'horizontality': {
@@ -274,15 +275,9 @@ def testSamples(folder):
 def processImages(folder):
     results = dict()
     for filename in glob.glob("{}/*.jpg".format(folder)):
-        match = re.search(r"image-(.*).jpg", filename)
-        if (match):
-            date = match.group(1)
-            try:
-                parsed_date = datetime.datetime.strptime(date, "%Y%m%d-%H%M%S")
-                date = parsed_date.strftime("%Y%m%d %H%M%S")
-            except Exception as e:
-                print("{}: date error {}".format(filename, e), file=sys.stderr)
-                pass
+        date = parse_filename_date(filename)
+        if date:
+            date = date.strftime("%Y%m%d %H%M%S")
 
             try:
                 results[date] = extract(filename)
@@ -295,24 +290,63 @@ def processImages(folder):
 
     last = None
     nonvalid = 0
+    bogus = 0
 
     for date in sorted(results.keys()):
         valid = True
+        value = None
+        try:
+            value = int(results[date])
+        except ValueError:
+            nonvalid = nonvalid + 1
+            continue
 
         if last is not None:
-            if int(results[date]) < last:
+            if value < last:
                 valid = False
-            elif int(results[date]) > last + 10000:
+            elif value > last + 10000:
                 valid = False
 
-        print("{},{},{}".format(date, results[date], valid))
+        print("{},{},{}".format(date, value, valid))
 
         if not valid:
-            nonvalid = nonvalid + 1
+            bogus = bogus + 1
         else:
-            last = int(results[date])
+            last = value
 
-    print("{} bogus results out of {}".format(nonvalid, len(results.keys())))
+    print("{} invalid values and {} bogus values out of {}".format(
+        nonvalid, bogus, len(results.keys())))
+
+
+def extractAndUpload(images):
+    print("connecting to {}".format(os.getenv('INFLUX_HOST')))
+    client = InfluxDBClient(host=os.getenv('INFLUX_HOST'), port=443, ssl=True, username=os.getenv('INFLUX_USERNAME'), database=os.getenv('INFLUX_DATABASE'),
+                            password=os.getenv('INFLUX_PASSWORD'), path='/influxdb')
+    data = []
+
+    for filename in images:
+        try:
+            digits = extract(filename)
+
+            value = int(digits)
+            date = parse_filename_date(filename)
+            if date:
+                date = date.isoformat()
+                print("{}, {}".format(date, value))
+                data.append({
+                    "measurement": "gazmeter",
+                    "time": date,
+                    "fields": {
+                        "value": value
+                    }
+                })
+            else:
+                print("Invalid date: {}".format(filename))
+        except Exception as e:
+            print("Error {}: {}".format(filename, e))
+
+    print("Pushing data to influxdb!")
+    client.write_points(data)
 
 
 def main():
@@ -330,6 +364,8 @@ def main():
     subparsers.add_parser('test-samples').add_argument("folder")
     subparsers.add_parser('train-samples').add_argument("folder")
     subparsers.add_parser('process-images').add_argument("folder")
+
+    subparsers.add_parser('upload').add_argument("images", nargs='+')
 
     args = parser.parse_args()
 
@@ -353,6 +389,8 @@ def main():
         trainWithSamples(args.folder)
     elif args.subparser_name == 'test-samples':
         testSamples(args.folder)
+    elif args.subparser_name == 'upload':
+        extractAndUpload(args.images)
     else:
         parser.print_help()
 

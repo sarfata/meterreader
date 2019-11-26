@@ -27,6 +27,8 @@ class DigitRecognition(object):
             print("Warning! No KNN model found. Train the model!", file=sys.stderr)
 
     def recognize(self, image):
+        if image is None:
+            return 'X'
         return self.recognizeSVM(image)
 
     def recognizeKNN(self, image):

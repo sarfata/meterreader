@@ -33,6 +33,12 @@ Process an entire folder of images:
 
     ./meterreader.py process-images img201911
 
+To upload to influxdb:
+
+    source .env
+    (export variables - all 4)
+    ./meterreader.py upload 2019
+
 ## Good resources
 
 ### Installing OpenCV (2019 new mac Edition)
